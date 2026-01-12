@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 use crate::error::{AppError, Result};
 
 const RAINDROP_API_URL: &str = "https://api.raindrop.io/rest/v1";
-const NEWS_COLLECTION_NAME: &str = "News";
+const NEWS_COLLECTION_NAME: &str = "News Links";
 
 // Cache for collection ID
 static NEWS_COLLECTION_ID: OnceLock<Mutex<Option<i64>>> = OnceLock::new();
