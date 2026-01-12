@@ -214,6 +214,9 @@ impl App {
     }
 
     async fn on_selection_changed(&mut self) -> Result<()> {
+        // Reload articles to remove any that were marked read
+        self.reload_articles().await?;
+
         // Reset summary state when selection changes
         self.summary_status = SummaryStatus::NotGenerated;
         self.current_summary = None;
@@ -332,7 +335,7 @@ impl App {
                     if !article.is_read {
                         let id = article.id;
                         self.repository.mark_article_read(id, true).await?;
-                        self.reload_articles().await?;
+                        // Don't reload - keep article visible until user navigates away
                     }
                 }
                 // Clear the timer so we don't keep checking
