@@ -305,8 +305,10 @@ impl App {
             let _ = tx.send(SummaryResult { article_id, result }).await;
         });
 
-        // Reload to update read status
-        self.reload_articles().await?;
+        // Update local article state without reloading (keep article visible)
+        if let Some(article) = self.articles.iter_mut().find(|a| a.id == article_id) {
+            article.is_read = true;
+        }
 
         Ok(())
     }
