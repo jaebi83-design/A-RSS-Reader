@@ -10,7 +10,7 @@ keywords = ["rss", "tui", "reader", "cli"]
 categories = ["command-line-utilities"]
 
 [[bin]]
-name = "rss-reader"
+name = "speedy-reader"
 path = "src/main.rs"
 
 [profile.release]

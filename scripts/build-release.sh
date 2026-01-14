@@ -4,7 +4,7 @@ set -e
 VERSION="${1:-$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)}"
 DIST_DIR="dist"
 
-echo "Building rss-reader v${VERSION}"
+echo "Building speedy-reader v${VERSION}"
 
 # Create dist directory
 mkdir -p "$DIST_DIR"
@@ -39,9 +39,9 @@ echo "Building for $PLATFORM ($TARGET)..."
 cargo build --release --target "$TARGET"
 
 # Package
-ARCHIVE="rss-reader-v${VERSION}-${PLATFORM}.tar.gz"
+ARCHIVE="speedy-reader-v${VERSION}-${PLATFORM}.tar.gz"
 cd "target/$TARGET/release"
-tar -czvf "../../../$DIST_DIR/$ARCHIVE" rss-reader
+tar -czvf "../../../$DIST_DIR/$ARCHIVE" speedy-reader
 cd ../../..
 
 echo ""
