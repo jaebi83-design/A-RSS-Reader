@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -110,6 +111,20 @@ fn render_article_list(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             let star = if article.is_starred { "★ " } else { "  " };
+            let day = article
+                .published_at
+                .map(|dt| {
+                    match dt.weekday() {
+                        chrono::Weekday::Mon => "Mon",
+                        chrono::Weekday::Tue => "Tue",
+                        chrono::Weekday::Wed => "Wed",
+                        chrono::Weekday::Thu => "Thu",
+                        chrono::Weekday::Fri => "Fri",
+                        chrono::Weekday::Sat => "Sat",
+                        chrono::Weekday::Sun => "Sun",
+                    }
+                })
+                .unwrap_or("???");
             let feed = article
                 .feed_title
                 .as_deref()
@@ -118,6 +133,7 @@ fn render_article_list(frame: &mut Frame, app: &App, area: Rect) {
 
             let line = Line::from(vec![
                 Span::styled(star, Style::default().fg(Color::Yellow)),
+                Span::styled(format!("{day}: "), Style::default().fg(Color::DarkGray)),
                 Span::styled(format!("[{feed}] "), Style::default().fg(Color::Blue)),
                 Span::styled(title, style),
             ]);
