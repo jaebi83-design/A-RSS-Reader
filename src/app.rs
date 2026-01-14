@@ -244,8 +244,7 @@ impl App {
             AppAction::UndeleteArticle => {
                 if let Some((feed_id, guid)) = self.last_deleted.take() {
                     self.repository.undelete_article(feed_id, &guid).await?;
-                    // Refresh to bring the article back
-                    self.refresh_feeds().await?;
+                    // Article will return on next refresh (press 'r')
                 }
             }
 
