@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
 
     // If headless refresh, just refresh and exit
     if headless_refresh {
-        app.refresh_feeds().await?;
+        app.refresh_feeds_blocking().await?;
         println!("Refreshed {} feeds", app.feeds.len());
         return Ok(());
     }
@@ -103,6 +103,12 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Resul
 
         // Poll for completed summary results
         app.poll_summary_result().await?;
+
+        // Poll for completed refresh results
+        app.poll_refresh_result().await?;
+
+        // Poll for completed feed discovery results
+        app.poll_discovery_result().await?;
 
         // Check if article has been viewed long enough to mark as read
         app.check_read_timer().await?;

@@ -8,6 +8,7 @@ use reqwest::Client;
 use crate::error::Result;
 use crate::models::{Feed, NewArticle, NewFeed};
 
+#[derive(Clone)]
 pub struct FeedFetcher {
     client: Client,
 }

@@ -19,6 +19,16 @@ pub struct SummaryResult {
     pub result: std::result::Result<(String, String), String>, // (content, model) or error
 }
 
+// Message for completed refresh
+pub struct RefreshResult {
+    pub results: Vec<(i64, Vec<crate::models::NewArticle>)>,
+}
+
+// Message for completed feed discovery
+pub struct FeedDiscoveryResult {
+    pub result: std::result::Result<crate::models::NewFeed, String>,
+}
+
 pub struct App {
     // Data
     pub feeds: Vec<Feed>,
@@ -47,10 +57,15 @@ pub struct App {
 
     // Async state
     pub is_refreshing: bool,
+    pub is_discovering_feed: bool,
     pub summary_status: SummaryStatus,
     pub pending_summary_article_id: Option<i64>,
     summary_rx: mpsc::Receiver<SummaryResult>,
     summary_tx: mpsc::Sender<SummaryResult>,
+    refresh_rx: mpsc::Receiver<RefreshResult>,
+    refresh_tx: mpsc::Sender<RefreshResult>,
+    discovery_rx: mpsc::Receiver<FeedDiscoveryResult>,
+    discovery_tx: mpsc::Sender<FeedDiscoveryResult>,
 
     // Services
     pub repository: Repository,
@@ -87,6 +102,8 @@ impl App {
         let articles = repository.get_all_articles_sorted().await?;
 
         let (summary_tx, summary_rx) = mpsc::channel(1);
+        let (refresh_tx, refresh_rx) = mpsc::channel(1);
+        let (discovery_tx, discovery_rx) = mpsc::channel(1);
 
         Ok(Self {
             feeds,
@@ -111,10 +128,15 @@ impl App {
             spinner_frame: 0,
             selection_time: None,
             is_refreshing: false,
+            is_discovering_feed: false,
             summary_status: SummaryStatus::NotGenerated,
             pending_summary_article_id: None,
             summary_rx,
             summary_tx,
+            refresh_rx,
+            refresh_tx,
+            discovery_rx,
+            discovery_tx,
             repository,
             fetcher,
             summarizer,
@@ -168,7 +190,7 @@ impl App {
             }
 
             AppAction::RefreshFeeds => {
-                self.refresh_feeds().await?;
+                self.refresh_feeds();
             }
 
             AppAction::ToggleStarred => {
@@ -290,7 +312,7 @@ impl App {
             }
 
             AppAction::FeedInputConfirm => {
-                self.add_feed_from_url().await?;
+                self.start_feed_discovery();
             }
 
             AppAction::FeedInputCancel => {
@@ -528,12 +550,12 @@ impl App {
         Ok(())
     }
 
-    /// Add a new feed from a URL (direct RSS/Atom or webpage with feed discovery)
-    async fn add_feed_from_url(&mut self) -> Result<()> {
+    /// Start discovering a feed from a URL (non-blocking)
+    fn start_feed_discovery(&mut self) {
         let url = self.feed_input.trim().to_string();
         if url.is_empty() {
             self.feed_input_active = false;
-            return Ok(());
+            return;
         }
 
         // Normalize URL - add https:// if no protocol specified
@@ -544,66 +566,115 @@ impl App {
         };
 
         self.feed_input_status = Some("Discovering feed...".to_string());
+        self.is_discovering_feed = true;
 
-        match self.fetcher.discover_feed(&url).await {
-            Ok(new_feed) => {
-                // Check if feed already exists
-                if self.feeds.iter().any(|f| f.url == new_feed.url) {
-                    self.feed_input_status = Some(format!("Feed already exists: {}", new_feed.title));
-                    return Ok(());
-                }
+        let fetcher = self.fetcher.clone();
+        let tx = self.discovery_tx.clone();
 
-                let feed_title = new_feed.title.clone();
-                match self.repository.insert_feed(new_feed).await {
-                    Ok(feed_id) => {
-                        self.feed_input_status = Some(format!("Added: {}", feed_title));
-                        tracing::info!("Added new feed: {} (id={})", feed_title, feed_id);
+        tokio::spawn(async move {
+            let result = match fetcher.discover_feed(&url).await {
+                Ok(feed) => Ok(feed),
+                Err(e) => Err(e.to_string()),
+            };
+            let _ = tx.send(FeedDiscoveryResult { result }).await;
+        });
+    }
 
-                        // Reload feeds list
-                        self.feeds = self.repository.get_all_feeds().await?;
+    /// Poll for completed feed discovery results (non-blocking)
+    pub async fn poll_discovery_result(&mut self) -> Result<()> {
+        if let Ok(result) = self.discovery_rx.try_recv() {
+            self.is_discovering_feed = false;
 
-                        // Clear input after short delay to show success message
-                        self.feed_input_active = false;
-                        self.feed_input.clear();
-
-                        // Refresh the new feed
-                        self.refresh_feeds().await?;
+            match result.result {
+                Ok(new_feed) => {
+                    // Check if feed already exists
+                    if self.feeds.iter().any(|f| f.url == new_feed.url) {
+                        self.feed_input_status = Some(format!("Feed already exists: {}", new_feed.title));
+                        return Ok(());
                     }
-                    Err(e) => {
-                        self.feed_input_status = Some(format!("Error: {}", e));
-                        tracing::error!("Failed to insert feed: {}", e);
+
+                    let feed_title = new_feed.title.clone();
+                    match self.repository.insert_feed(new_feed).await {
+                        Ok(feed_id) => {
+                            self.feed_input_status = Some(format!("Added: {}", feed_title));
+                            tracing::info!("Added new feed: {} (id={})", feed_title, feed_id);
+
+                            // Reload feeds list
+                            self.feeds = self.repository.get_all_feeds().await?;
+
+                            // Clear input after short delay to show success message
+                            self.feed_input_active = false;
+                            self.feed_input.clear();
+
+                            // Refresh the new feed
+                            self.refresh_feeds();
+                        }
+                        Err(e) => {
+                            self.feed_input_status = Some(format!("Error: {}", e));
+                            tracing::error!("Failed to insert feed: {}", e);
+                        }
                     }
                 }
-            }
-            Err(_) => {
-                self.feed_input_status = Some("No feed here.".to_string());
+                Err(_) => {
+                    self.feed_input_status = Some("No feed here.".to_string());
+                }
             }
         }
-
         Ok(())
     }
 
-    pub async fn refresh_feeds(&mut self) -> Result<()> {
+    pub fn refresh_feeds(&mut self) {
+        if self.is_refreshing {
+            return; // Already refreshing
+        }
         self.is_refreshing = true;
 
         let feeds = self.feeds.clone();
-        let results = self.fetcher.refresh_all(feeds).await;
+        let fetcher = self.fetcher.clone();
+        let tx = self.refresh_tx.clone();
 
-        for (feed_id, articles) in results {
-            for article in articles {
-                self.repository.upsert_article(article).await?;
+        tokio::spawn(async move {
+            let results = fetcher.refresh_all(feeds).await;
+            let _ = tx.send(RefreshResult { results }).await;
+        });
+    }
+
+    /// Poll for completed refresh results (non-blocking)
+    pub async fn poll_refresh_result(&mut self) -> Result<()> {
+        if let Ok(result) = self.refresh_rx.try_recv() {
+            // Process the refresh results
+            for (feed_id, articles) in result.results {
+                for article in articles {
+                    if let Err(e) = self.repository.upsert_article(article).await {
+                        tracing::warn!("Failed to upsert article: {}", e);
+                    }
+                }
+                if let Err(e) = self.repository.update_feed_last_fetched(feed_id).await {
+                    tracing::warn!("Failed to update feed last_fetched: {}", e);
+                }
             }
-            self.repository.update_feed_last_fetched(feed_id).await?;
-        }
 
-        // Clean up articles older than 7 days after refresh
-        let deleted = self.repository.delete_old_articles(7).await?;
-        if deleted > 0 {
-            tracing::info!("Deleted {} articles older than 7 days", deleted);
-        }
+            // Clean up articles older than 7 days after refresh
+            let deleted = self.repository.delete_old_articles(7).await?;
+            if deleted > 0 {
+                tracing::info!("Deleted {} articles older than 7 days", deleted);
+            }
 
-        self.reload_articles().await?;
-        self.is_refreshing = false;
+            self.reload_articles().await?;
+            self.is_refreshing = false;
+        }
+        Ok(())
+    }
+
+    /// Refresh feeds and wait for completion (blocking, for CLI/headless use)
+    pub async fn refresh_feeds_blocking(&mut self) -> Result<()> {
+        self.refresh_feeds();
+
+        // Wait for the refresh to complete
+        while self.is_refreshing {
+            self.poll_refresh_result().await?;
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
 
         Ok(())
     }
@@ -751,7 +822,7 @@ impl App {
         self.feeds = self.repository.get_all_feeds().await?;
 
         // Refresh the newly imported feeds
-        self.refresh_feeds().await?;
+        self.refresh_feeds();
 
         Ok(())
     }
