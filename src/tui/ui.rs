@@ -305,8 +305,8 @@ fn render_feed_input(frame: &mut Frame, app: &App) {
             (status.clone(), Color::Red)
         } else if status.starts_with("Feed already") {
             (status.clone(), Color::Yellow)
-        } else if status == "Searching..." {
-            (format!("{} Searching...", app.spinner_char()), Color::Cyan)
+        } else if status.starts_with("Discovering") {
+            (format!("{} {}", app.spinner_char(), status), Color::Cyan)
         } else {
             (status.clone(), Color::DarkGray)
         };
