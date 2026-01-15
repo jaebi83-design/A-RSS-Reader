@@ -199,7 +199,9 @@ impl App {
             AppAction::OpenInBrowser => {
                 if let Some(article) = self.selected_article() {
                     let url = article.url.clone();
-                    let _ = open::that(&url);
+                    std::thread::spawn(move || {
+                        let _ = open::that(&url);
+                    });
                 }
             }
 
@@ -901,7 +903,9 @@ impl App {
 
         let mailto_url = format!("mailto:?subject={}&body={}", subject, body);
 
-        // Open the mailto link in the default email client
-        let _ = open::that(&mailto_url);
+        // Open the mailto link in the default email client (in background to avoid blocking)
+        std::thread::spawn(move || {
+            let _ = open::that(&mailto_url);
+        });
     }
 }
