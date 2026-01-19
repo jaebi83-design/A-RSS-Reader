@@ -1,0 +1,11 @@
+# Core dependencies
+aiohttp>=3.9.0
+aiosqlite>=0.19.0
+feedparser>=6.0.0
+html2text>=2024.2.26
+
+# Configuration
+tomli>=2.0.0; python_version < '3.11'
+tomli-w>=1.0.0
+
+# For Python 3.11+, tomllib is built-in

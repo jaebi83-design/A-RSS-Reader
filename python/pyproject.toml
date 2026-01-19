@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speedy-reader"
+version = "1.0.0"
+description = "A TUI RSS reader with AI-powered summaries"
+readme = "../README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["rss", "reader", "cli", "ai", "claude"]
+authors = [
+    {name = "Converted from Rust to Python"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "aiohttp>=3.9.0",
+    "aiosqlite>=0.19.0",
+    "feedparser>=6.0.0",
+    "html2text>=2024.2.26",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "tomli-w>=1.0.0",
+]
+
+[project.scripts]
+speedy-reader = "src.main:main"
+
+[project.urls]
+Homepage = "https://github.com/leolaporte/rss-reader"
+Repository = "https://github.com/leolaporte/rss-reader"
