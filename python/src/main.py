@@ -1,8 +1,4 @@
-"""Main entry point for SpeedyReader Python version.
-
-Note: This is a command-line version without the full TUI.
-For a complete TUI experience, you would need to integrate with 'textual' or 'rich' libraries.
-"""
+"""Main entry point for SpeedyReader Python version."""
 
 import asyncio
 import sys
@@ -12,8 +8,23 @@ from .app import App
 from .config import Config
 
 
-async def main_async():
-    """Main async function."""
+def main_async():
+    """Main function."""
+    args = sys.argv[1:]
+
+    # Check for --tui flag (launch Terminal UI)
+    if len(args) == 0 or (len(args) >= 1 and args[0] == "--tui"):
+        from .tui import SpeedyReaderTUI
+        app = SpeedyReaderTUI()
+        app.run()
+        return
+
+    # For CLI commands, run async
+    return asyncio.run(main_cli_async())
+
+
+async def main_cli_async():
+    """Main async function for CLI commands."""
     args = sys.argv[1:]
 
     # Load configuration
@@ -152,7 +163,7 @@ To add a TUI, consider using the 'textual' library (https://textual.textualize.i
 def main():
     """Main entry point."""
     try:
-        asyncio.run(main_async())
+        main_async()
     except KeyboardInterrupt:
         print("\nInterrupted")
         sys.exit(0)
