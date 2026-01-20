@@ -39,6 +39,8 @@ class Config:
     claude_api_key: Optional[str] = None
     raindrop_token: Optional[str] = None
     refresh_interval_minutes: int = 30
+    article_retention_days: int = 7
+    articles_per_feed: Optional[int] = None  # None = fetch all articles
     default_tags: List[str] = field(default_factory=lambda: ["rss"])
 
     @staticmethod

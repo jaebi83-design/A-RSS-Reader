@@ -38,32 +38,52 @@ class App:
         self.articles: List[Article] = []
         self.current_summary: Optional[Summary] = None
 
-    async def initialize(self):
-        """Initialize the application and database."""
+    async def initialize(self, clear_articles: bool = False):
+        """Initialize the application and database.
+
+        Args:
+            clear_articles: If True, delete all articles before loading
+        """
         self.repository = Repository(self.config.db_path)
         await self.repository.connect()
 
-        # Clean up old articles
-        deleted = await self.repository.delete_old_articles(7)
-        if deleted > 0:
-            print(f"Deleted {deleted} articles older than 7 days")
+        if clear_articles:
+            # Clear all articles
+            deleted = await self.repository.clear_all_articles()
+            if deleted > 0:
+                print(f"Cleared {deleted} articles from database")
+        else:
+            # Clean up old articles
+            retention_days = self.config.article_retention_days
+            deleted = await self.repository.delete_old_articles(retention_days)
+            if deleted > 0:
+                print(f"Deleted {deleted} articles older than {retention_days} days")
 
-        # Load feeds and articles
+        # Load feeds and articles (filter by retention period)
         self.feeds = await self.repository.get_all_feeds()
-        self.articles = await self.repository.get_all_articles_sorted()
+        retention_days = self.config.article_retention_days
+        self.articles = await self.repository.get_all_articles_sorted(max_age_days=retention_days)
 
     async def close(self):
         """Clean up and close the application."""
         if self.repository:
             # Compact database on exit
-            await self.repository.compact_database(7)
+            retention_days = self.config.article_retention_days
+            await self.repository.compact_database(retention_days)
             await self.repository.close()
 
-    async def refresh_feeds(self):
-        """Refresh all feeds and fetch new articles."""
-        print(f"Refreshing {len(self.feeds)} feeds...")
+    async def refresh_feeds(self, limit_per_feed: Optional[int] = None):
+        """Refresh all feeds and fetch new articles.
 
-        results = await self.fetcher.refresh_all(self.feeds)
+        Args:
+            limit_per_feed: Optional limit on articles per feed (None = all)
+        """
+        if limit_per_feed:
+            print(f"Refreshing {len(self.feeds)} feeds (limit {limit_per_feed} articles per feed)...")
+        else:
+            print(f"Refreshing {len(self.feeds)} feeds...")
+
+        results = await self.fetcher.refresh_all(self.feeds, limit_per_feed=limit_per_feed)
 
         total_new = 0
         for feed_id, articles in results:
@@ -74,8 +94,8 @@ class App:
 
             await self.repository.update_feed_last_fetched(feed_id)
 
-        # Reload articles
-        self.articles = await self.repository.get_all_articles_sorted()
+        # Reload articles (filter by retention period)
+        self.articles = await self.repository.get_all_articles_sorted(max_age_days=self.config.article_retention_days)
 
         print(f"Added {total_new} new articles")
         return total_new
@@ -218,7 +238,7 @@ class App:
     async def delete_article(self, article_id: int):
         """Delete an article."""
         await self.repository.delete_article(article_id)
-        self.articles = await self.repository.get_all_articles_sorted()
+        self.articles = await self.repository.get_all_articles_sorted(max_age_days=self.config.article_retention_days)
 
     def get_article_by_id(self, article_id: int) -> Optional[Article]:
         """Get an article by its ID."""

@@ -147,16 +147,35 @@ class Repository:
         await self._conn.commit()
         return cursor.lastrowid
 
-    async def get_all_articles_sorted(self) -> List[Article]:
-        """Get all articles sorted by published date."""
-        cursor = await self._conn.execute(
-            """SELECT a.id, a.feed_id, a.guid, a.title, a.url, a.author,
-                      a.content, a.content_text, a.published_at, a.fetched_at,
-                      f.title as feed_title
-               FROM articles a
-               JOIN feeds f ON a.feed_id = f.id
-               ORDER BY a.published_at DESC NULLS LAST, a.fetched_at DESC"""
-        )
+    async def get_all_articles_sorted(self, max_age_days: Optional[int] = None) -> List[Article]:
+        """Get all articles sorted by published date.
+
+        Args:
+            max_age_days: Optional filter to only return articles newer than this many days
+        """
+        if max_age_days is not None:
+            # Filter by age
+            cursor = await self._conn.execute(
+                """SELECT a.id, a.feed_id, a.guid, a.title, a.url, a.author,
+                          a.content, a.content_text, a.published_at, a.fetched_at,
+                          f.title as feed_title
+                   FROM articles a
+                   JOIN feeds f ON a.feed_id = f.id
+                   WHERE (a.published_at >= datetime('now', '-' || ? || ' days')
+                       OR (a.published_at IS NULL AND a.fetched_at >= datetime('now', '-' || ? || ' days')))
+                   ORDER BY a.published_at DESC NULLS LAST, a.fetched_at DESC""",
+                (max_age_days, max_age_days)
+            )
+        else:
+            # No filter
+            cursor = await self._conn.execute(
+                """SELECT a.id, a.feed_id, a.guid, a.title, a.url, a.author,
+                          a.content, a.content_text, a.published_at, a.fetched_at,
+                          f.title as feed_title
+                   FROM articles a
+                   JOIN feeds f ON a.feed_id = f.id
+                   ORDER BY a.published_at DESC NULLS LAST, a.fetched_at DESC"""
+            )
         rows = await cursor.fetchall()
         articles = []
         for row in rows:
@@ -230,6 +249,17 @@ class Repository:
                   OR (published_at IS NULL AND fetched_at < datetime('now', '-' || ? || ' days'))""",
             (days, days),
         )
+        await self._conn.commit()
+        return cursor.rowcount
+
+    async def clear_all_articles(self) -> int:
+        """Delete all articles from the database."""
+        # Delete related data first
+        await self._conn.execute("DELETE FROM summaries")
+        await self._conn.execute("DELETE FROM saved_to_raindrop")
+
+        # Delete all articles
+        cursor = await self._conn.execute("DELETE FROM articles")
         await self._conn.commit()
         return cursor.rowcount
 

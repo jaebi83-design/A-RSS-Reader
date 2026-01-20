@@ -21,8 +21,14 @@ class FeedFetcher:
         self.user_agent = "speedy-reader/1.0"
         self.timeout = aiohttp.ClientTimeout(total=30, connect=10)
 
-    async def fetch_feed(self, feed_id: int, url: str) -> List[NewArticle]:
-        """Fetch and parse a feed, returning a list of articles."""
+    async def fetch_feed(self, feed_id: int, url: str, limit: Optional[int] = None) -> List[NewArticle]:
+        """Fetch and parse a feed, returning a list of articles.
+
+        Args:
+            feed_id: The feed ID
+            url: The feed URL
+            limit: Optional limit on number of articles to return (None = all)
+        """
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
             try:
                 async with session.get(
@@ -90,20 +96,29 @@ class FeedFetcher:
                         )
                         articles.append(article)
 
+                    # Apply limit if specified
+                    if limit is not None and limit > 0:
+                        articles = articles[:limit]
+
                     return articles
 
             except aiohttp.ClientError as e:
                 raise HttpError(str(e))
 
-    async def refresh_all(self, feeds: List[Feed]) -> List[Tuple[int, List[NewArticle]]]:
-        """Refresh all feeds concurrently with rate limiting."""
+    async def refresh_all(self, feeds: List[Feed], limit_per_feed: Optional[int] = None) -> List[Tuple[int, List[NewArticle]]]:
+        """Refresh all feeds concurrently with rate limiting.
+
+        Args:
+            feeds: List of feeds to refresh
+            limit_per_feed: Optional limit on articles per feed (None = all)
+        """
         results = []
         semaphore = asyncio.Semaphore(5)  # Max 5 concurrent fetches
 
         async def fetch_with_limit(feed: Feed):
             async with semaphore:
                 try:
-                    articles = await self.fetch_feed(feed.id, feed.url)
+                    articles = await self.fetch_feed(feed.id, feed.url, limit=limit_per_feed)
                     return (feed.id, articles)
                 except Exception:
                     return None
