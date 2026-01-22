@@ -2,7 +2,7 @@
 
 A terminal-based RSS reader with AI-powered article summaries.
 
-Built for personal use, entirely vibe coded with [Claude Code](https://claude.com/claude-code).
+Built for personal use from a Leo LaPorte base (thanks Leo!), entirely vibe coded with [Claude Code](https://claude.com/claude-code) as my first learning project.
 
 ## Available Versions
 
